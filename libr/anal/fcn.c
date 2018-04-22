@@ -711,10 +711,7 @@ static bool try_get_jmptbl_info(RAnal *anal, RAnalFunction *fcn, ut64 addr, RAna
 	RListIter *iter;
 	RAnalBlock *tmp_bb, *prev_bb;
 	prev_bb = 0;
-	bool dbg = false;
 	if (!fcn->bbs){
-		if (dbg)
-			eprintf("no function bbs\n");
 		return false;
 	}
 
@@ -727,8 +724,6 @@ static bool try_get_jmptbl_info(RAnal *anal, RAnalFunction *fcn, ut64 addr, RAna
 	}
 	// predecessor must be a conditional jump
 	if (!prev_bb || !prev_bb->jump || !prev_bb->fail){
-		if (dbg)
-			eprintf("no pred cond jmp\n");
 		return false;
 	}
 
@@ -740,25 +735,20 @@ static bool try_get_jmptbl_info(RAnal *anal, RAnalFunction *fcn, ut64 addr, RAna
 	// search for a cmp register with a resonable size
 	anal->iob.read_at (anal->iob.io, prev_bb->addr, (ut8 *) bb_buf, prev_bb->size);
 	isValid = false;
-	// TODO: Walk in reverse
-	for (int i = 0; i < prev_bb->op_pos_size; i++) {
+
+	for (int i = prev_bb->op_pos_size - 1; i >= 0; i--) {
 		ut64 addr = prev_bb->addr + prev_bb->op_pos[i];
 		int len = r_anal_op (anal, &tmp_aop, addr, bb_buf + prev_bb->op_pos[i], prev_bb->size - prev_bb->op_pos[i], R_ANAL_OP_MASK_ALL);
-		if (dbg)
-			eprintf("addr (%d): 0x%" PFMT64x ": %d\n", len, tmp_aop.addr, tmp_aop.type);
 
 		if (tmp_aop.type != R_ANAL_OP_TYPE_CMP) {
 			continue;
 		}
-		// TODO: How? opex?
+		// get the value of the cmp
 		// for operands in op, check if type is immediate and val is sane
+		// TODO: How? opex?
 
-		if (dbg)
-			eprintf("cmp: val %llu, refptr: %d\n", tmp_aop.val, tmp_aop.refptr);
 
 		// for the time being, this seems to work
-		// get the value of the cmp
-
 		// might not actually have a value, let the next step figure out the size then
 		if (tmp_aop.val == UT64_MAX) {
 			isValid = true;
@@ -773,27 +763,19 @@ static bool try_get_jmptbl_info(RAnal *anal, RAnalFunction *fcn, ut64 addr, RAna
 			*table_size = tmp_aop.refptr + 1;
 		}
 
-		// // TODO: check the jmp for whether val is included in valid range or not (ja vs jae)
-		// r_anal_op (anal, &tmp_aop, addr, bb_buf + prev_bb->op_pos[prev_bb->size-1],
-		// 	prev_bb->size - prev_bb->op_pos[prev_bb->size-1], R_ANAL_OP_MASK_ALL);
-		
-		// if (tmp_aop.type != R_ANAL_OP_TYPE_CJMP)
-		// 	break;
+		// TODO: check the jmp for whether val is included in valid range or not (ja vs jae)
+
 		break;
 	}
 	free(bb_buf);
 	if (!isValid) {
-		if (dbg)
-			eprintf("no cmp\n");
 		return false;
 	}
 
-	if (dbg) {
-		eprintf ("switch at 0x%" PFMT64x "\n\tdefault case 0x%" PFMT64x "\n\t#cases: %d\n",
-				addr,
-				*default_case,
-				*table_size);
-	}
+	// eprintf ("switch at 0x%" PFMT64x "\n\tdefault case 0x%" PFMT64x "\n\t#cases: %d\n",
+	// 		addr,
+	// 		*default_case,
+	// 		*table_size);
 
 	return true;
 }
